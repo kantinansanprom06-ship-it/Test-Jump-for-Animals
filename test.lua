@@ -1,42 +1,397 @@
--- === Oxide HUB standalone compatibility ===
--- If ScriptLoader already provides _G.OxideLib, use it.
--- If this file is executed directly from GitHub, provide a safe no-op UI
--- compatibility layer so the core script does not crash on CreateWindow.
 -- ============================================================================
+-- STANDALONE OXIDE UI
+-- No external OxideLib/ScriptLoader is required.
+-- ============================================================================
+local UIS = game:GetService("UserInputService")
+local LP0 = game:GetService("Players").LocalPlayer
+
 local Library = rawget(_G, "OxideLib")
 
 if not Library or type(Library.CreateWindow) ~= "function" then
-    local function noop() end
+    Library = {}
 
-    local function makeSubTab()
-        local t = {}
-        function t:AddSection(...) return t end
-        function t:AddDivider(...) return t end
-        function t:AddLabel(...) return { Set = noop } end
-        function t:AddToggle(...) return t end
-        function t:AddButton(...) return t end
-        function t:AddInput(...) return t end
-        function t:AddSlider(...) return t end
-        function t:AddMultiDropdown(...) return t end
-        function t:AddKeybind(...) return t end
-        function t:AddSubTab(...) return makeSubTab() end
-        return t
+    local function getParent()
+        return LP0:WaitForChild("PlayerGui")
     end
 
-    Library = {
-        CreateWindow = function(_, opts)
-            warn("[Oxide HUB] _G.OxideLib not found. Running in standalone/headless mode.")
-            local w = {}
-            function w:AddTab(...) return makeSubTab() end
-            function w:Notify(...) warn("[Oxide HUB] " .. tostring((select(2, ...)) or "")) end
-            function w:Toggle(...) end
-            function w:Destroy() end
-            return w
-        end
-    }
-end
+    local function corner(obj, radius)
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, radius or 6)
+        c.Parent = obj
+    end
 
--- ============================================================================
+    local function makeText(parent, text, size, bold)
+        local l = Instance.new("TextLabel")
+        l.BackgroundTransparency = 1
+        l.Text = tostring(text or "")
+        l.TextSize = size or 14
+        l.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+        l.TextXAlignment = Enum.TextXAlignment.Left
+        l.TextColor3 = Color3.fromRGB(235,235,240)
+        l.Parent = parent
+        return l
+    end
+
+    function Library:CreateWindow(opts)
+        opts = opts or {}
+        local parent = getParent()
+        local old = parent:FindFirstChild("OxideStandaloneUI")
+        if old then pcall(function() old:Destroy() end) end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "OxideStandaloneUI"
+        gui.ResetOnSpawn = false
+        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        gui.Parent = parent
+
+        local root = Instance.new("Frame")
+        root.Size = UDim2.fromOffset(720, 500)
+        root.Position = UDim2.new(0.5, -360, 0.5, -250)
+        root.BackgroundColor3 = Color3.fromRGB(18,18,23)
+        root.BorderSizePixel = 0
+        root.Parent = gui
+        corner(root,10)
+
+        local top = Instance.new("Frame")
+        top.Size = UDim2.new(1,0,0,48)
+        top.BackgroundColor3 = Color3.fromRGB(25,25,32)
+        top.BorderSizePixel = 0
+        top.Parent = root
+        corner(top,10)
+
+        local title = makeText(top, opts.Name or "Oxide HUB", 16, true)
+        title.Position = UDim2.fromOffset(16,5)
+        title.Size = UDim2.new(1,-120,0,22)
+        local subTitle = makeText(top, "Standalone UI", 11, false)
+        subTitle.TextColor3 = Color3.fromRGB(150,150,160)
+        subTitle.Position = UDim2.fromOffset(16,27)
+        subTitle.Size = UDim2.new(1,-120,0,16)
+
+        local close = Instance.new("TextButton")
+        close.Size = UDim2.fromOffset(34,30)
+        close.Position = UDim2.new(1,-42,0,9)
+        close.Text = "X"
+        close.TextSize = 14
+        close.Font = Enum.Font.GothamBold
+        close.TextColor3 = Color3.fromRGB(240,240,240)
+        close.BackgroundColor3 = Color3.fromRGB(45,45,54)
+        close.BorderSizePixel = 0
+        close.Parent = top
+        corner(close,7)
+
+        local tabBar = Instance.new("ScrollingFrame")
+        tabBar.Size = UDim2.new(0,150,1,-58)
+        tabBar.Position = UDim2.fromOffset(8,55)
+        tabBar.BackgroundColor3 = Color3.fromRGB(22,22,28)
+        tabBar.BorderSizePixel = 0
+        tabBar.ScrollBarThickness = 4
+        tabBar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        tabBar.CanvasSize = UDim2.new()
+        tabBar.Parent = root
+        corner(tabBar,8)
+        local tabList = Instance.new("UIListLayout")
+        tabList.Padding = UDim.new(0,5)
+        tabList.Parent = tabBar
+        local tabPad = Instance.new("UIPadding")
+        tabPad.PaddingTop = UDim.new(0,8)
+        tabPad.PaddingLeft = UDim.new(0,7)
+        tabPad.PaddingRight = UDim.new(0,7)
+        tabPad.PaddingBottom = UDim.new(0,8)
+        tabPad.Parent = tabBar
+
+        local pages = Instance.new("Frame")
+        pages.Size = UDim2.new(1,-170,1,-58)
+        pages.Position = UDim2.fromOffset(162,55)
+        pages.BackgroundTransparency = 1
+        pages.Parent = root
+
+        local window = { _tabs = {}, _gui = gui, _root = root, _destroyed = false }
+
+        function window:Toggle()
+            if gui then gui.Enabled = not gui.Enabled end
+        end
+        function window:Destroy()
+            self._destroyed = true
+            if gui then pcall(function() gui:Destroy() end) end
+        end
+        function window:Notify(data)
+            data = data or {}
+            local n = Instance.new("TextLabel")
+            n.Size = UDim2.fromOffset(320,58)
+            n.Position = UDim2.new(1,-335,1,-70)
+            n.BackgroundColor3 = Color3.fromRGB(30,30,38)
+            n.BorderSizePixel = 0
+            n.TextColor3 = Color3.fromRGB(240,240,245)
+            n.TextSize = 13
+            n.Font = Enum.Font.Gotham
+            n.TextXAlignment = Enum.TextXAlignment.Left
+            n.TextWrapped = true
+            n.Text = "  " .. tostring(data.Title or "Oxide") .. "\n  " .. tostring(data.Content or "")
+            n.Parent = gui
+            corner(n,8)
+            task.delay(tonumber(data.Duration) or 2.5, function()
+                if n and n.Parent then n:Destroy() end
+            end)
+        end
+
+        local function makeSub(page, subButtons, name)
+            local sub = {}
+            local header = page:FindFirstChild("SubHeader")
+            local body = page:FindFirstChild("SubBody")
+            if not header then
+                header = Instance.new("Frame")
+                header.Name = "SubHeader"
+                header.Size = UDim2.new(1,0,0,38)
+                header.BackgroundTransparency = 1
+                header.Parent = page
+                local hl = Instance.new("UIListLayout")
+                hl.FillDirection = Enum.FillDirection.Horizontal
+                hl.Padding = UDim.new(0,5)
+                hl.Parent = header
+
+                body = Instance.new("Frame")
+                body.Name = "SubBody"
+                body.Size = UDim2.new(1,0,1,-42)
+                body.Position = UDim2.fromOffset(0,42)
+                body.BackgroundColor3 = Color3.fromRGB(22,22,28)
+                body.BorderSizePixel = 0
+                body.Parent = page
+                corner(body,8)
+            end
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.fromOffset(115,32)
+            btn.Text = tostring(name)
+            btn.TextSize = 12
+            btn.Font = Enum.Font.GothamSemibold
+            btn.TextColor3 = Color3.fromRGB(220,220,225)
+            btn.BackgroundColor3 = Color3.fromRGB(35,35,44)
+            btn.BorderSizePixel = 0
+            btn.Parent = header
+            corner(btn,6)
+            table.insert(subButtons, {button=btn, body=nil})
+
+            local scroll = Instance.new("ScrollingFrame")
+            scroll.Name = "Body_" .. tostring(name)
+            scroll.Size = UDim2.new(1,-16,1,-16)
+            scroll.Position = UDim2.fromOffset(8,8)
+            scroll.BackgroundTransparency = 1
+            scroll.BorderSizePixel = 0
+            scroll.ScrollBarThickness = 5
+            scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            scroll.CanvasSize = UDim2.new()
+            scroll.Parent = body
+            subButtons[#subButtons].body = scroll
+
+            local list = Instance.new("UIListLayout")
+            list.Padding = UDim.new(0,6)
+            list.Parent = scroll
+            local pad = Instance.new("UIPadding")
+            pad.PaddingBottom = UDim.new(0,10)
+            pad.Parent = scroll
+
+            sub._body = scroll
+
+            local function label(text, size, bold)
+                local l = makeText(scroll,text,size,bold)
+                l.Size = UDim2.new(1,-8,0,28)
+                l.TextWrapped = true
+                return l
+            end
+
+            function sub:AddSection(o)
+                local l=label(o and o.Name or "Section",13,true)
+                l.TextColor3=Color3.fromRGB(170,170,185)
+                return l
+            end
+            function sub:AddDivider()
+                local f=Instance.new("Frame")
+                f.Size=UDim2.new(1,-8,0,1)
+                f.BackgroundColor3=Color3.fromRGB(55,55,65)
+                f.BorderSizePixel=0
+                f.Parent=scroll
+                return f
+            end
+            function sub:AddLabel(o)
+                local l=label(o and o.Text or "",12,false)
+                return {Set=function(_,v) l.Text=tostring(v) end}
+            end
+            function sub:AddToggle(o)
+                o=o or {}
+                local state=o.Default==true
+                local b=Instance.new("TextButton")
+                b.Size=UDim2.new(1,-8,0,36)
+                b.Text=""
+                b.BorderSizePixel=0
+                b.Parent=scroll
+                corner(b,6)
+                local l=makeText(b,"",12,true)
+                l.Position=UDim2.fromOffset(10,0)
+                l.Size=UDim2.new(1,-20,1,0)
+                local function set(v,fire)
+                    state=not not v
+                    b.BackgroundColor3=state and Color3.fromRGB(45,95,65) or Color3.fromRGB(35,35,44)
+                    l.Text=(state and "ON  " or "OFF ")..tostring(o.Name or "Toggle")
+                    if fire and o.Callback then task.spawn(o.Callback,state) end
+                end
+                b.MouseButton1Click:Connect(function() set(not state,true) end)
+                set(state,false)
+                return {Set=set,Get=function() return state end}
+            end
+            function sub:AddButton(o)
+                o=o or {}
+                local b=Instance.new("TextButton")
+                b.Size=UDim2.new(1,-8,0,36)
+                b.Text=tostring(o.Name or "Button")
+                b.TextSize=12
+                b.Font=Enum.Font.GothamSemibold
+                b.TextColor3=Color3.fromRGB(240,240,245)
+                b.BackgroundColor3=Color3.fromRGB(45,45,58)
+                b.BorderSizePixel=0
+                b.Parent=scroll
+                corner(b,6)
+                b.MouseButton1Click:Connect(function() if o.Callback then task.spawn(o.Callback) end end)
+                return b
+            end
+            function sub:AddInput(o)
+                o=o or {}
+                local wrap=Instance.new("Frame")
+                wrap.Size=UDim2.new(1,-8,0,58)
+                wrap.BackgroundTransparency=1
+                wrap.Parent=scroll
+                local l=makeText(wrap,o.Name or "Input",11,false)
+                l.Size=UDim2.new(1,0,0,18)
+                local box=Instance.new("TextBox")
+                box.Size=UDim2.new(1,0,0,36)
+                box.Position=UDim2.fromOffset(0,20)
+                box.Text=tostring(o.Default or "")
+                box.PlaceholderText=tostring(o.Placeholder or "")
+                box.TextSize=12
+                box.Font=Enum.Font.Gotham
+                box.TextColor3=Color3.fromRGB(235,235,240)
+                box.PlaceholderColor3=Color3.fromRGB(130,130,140)
+                box.BackgroundColor3=Color3.fromRGB(32,32,40)
+                box.BorderSizePixel=0
+                box.ClearTextOnFocus=false
+                box.Parent=wrap
+                corner(box,6)
+                box.FocusLost:Connect(function() if o.Callback then task.spawn(o.Callback,box.Text) end end)
+                return box
+            end
+            function sub:AddSlider(o)
+                o=o or {}
+                local min,max=tonumber(o.Min) or 0,tonumber(o.Max) or 100
+                local value=tonumber(o.Default) or min
+                local b=Instance.new("TextButton")
+                b.Size=UDim2.new(1,-8,0,42)
+                b.Text=""
+                b.BackgroundColor3=Color3.fromRGB(32,32,40)
+                b.BorderSizePixel=0
+                b.Parent=scroll
+                corner(b,6)
+                local l=makeText(b,"",11,false)
+                l.Position=UDim2.fromOffset(10,0); l.Size=UDim2.new(1,-20,0,20)
+                local bar=Instance.new("Frame")
+                bar.Size=UDim2.new(1,-20,0,6); bar.Position=UDim2.fromOffset(10,28)
+                bar.BackgroundColor3=Color3.fromRGB(55,55,65); bar.BorderSizePixel=0; bar.Parent=b; corner(bar,3)
+                local fill=Instance.new("Frame")
+                fill.BackgroundColor3=Color3.fromRGB(85,120,220); fill.BorderSizePixel=0; fill.Parent=bar; corner(fill,3)
+                local function set(v,fire)
+                    value=math.clamp(tonumber(v) or min,min,max)
+                    local a=(value-min)/((max-min)==0 and 1 or (max-min))
+                    fill.Size=UDim2.new(a,0,1,0)
+                    l.Text=tostring(o.Name or "Slider")..": "..tostring(math.floor(value+0.5))..tostring(o.Suffix or "")
+                    if fire and o.Callback then task.spawn(o.Callback,value) end
+                end
+                b.MouseButton1Click:Connect(function() set(value>=max and min or value+math.max(1,(max-min)/10),true) end)
+                set(value,false)
+                return {Set=set,Get=function() return value end}
+            end
+            function sub:AddMultiDropdown(o)
+                o=o or {}
+                local selected={}
+                local opts=o.Options or {}
+                local b=Instance.new("TextButton")
+                b.Size=UDim2.new(1,-8,0,38)
+                b.Text=tostring(o.Name or "Dropdown")..": none"
+                b.TextSize=11; b.Font=Enum.Font.Gotham
+                b.TextColor3=Color3.fromRGB(235,235,240)
+                b.BackgroundColor3=Color3.fromRGB(32,32,40)
+                b.BorderSizePixel=0; b.Parent=scroll; corner(b,6)
+                local popup=nil
+                local function refresh(fire)
+                    local names={}
+                    for k,v in pairs(selected) do if v then table.insert(names,k) end end
+                    table.sort(names)
+                    b.Text=tostring(o.Name or "Dropdown")..": "..(#names==0 and "none" or table.concat(names,", "))
+                    if fire and o.Callback then task.spawn(o.Callback,names) end
+                end
+                local function closePopup() if popup then popup:Destroy(); popup=nil end end
+                b.MouseButton1Click:Connect(function()
+                    if popup then closePopup(); return end
+                    popup=Instance.new("Frame")
+                    popup.Size=UDim2.new(1,-8,0,math.min(220,math.max(40,#opts*30+8)))
+                    popup.BackgroundColor3=Color3.fromRGB(28,28,36); popup.BorderSizePixel=0; popup.ZIndex=20; popup.Parent=scroll; corner(popup,6)
+                    local pl=Instance.new("UIListLayout"); pl.Padding=UDim.new(0,2); pl.Parent=popup
+                    for _,name in ipairs(opts) do
+                        local x=Instance.new("TextButton"); x.Size=UDim2.new(1,-8,0,28); x.Text=(selected[name] and "[x] " or "[ ] ")..tostring(name); x.TextSize=11; x.Font=Enum.Font.Gotham; x.TextColor3=Color3.fromRGB(235,235,240); x.BackgroundTransparency=1; x.ZIndex=21; x.Parent=popup
+                        x.MouseButton1Click:Connect(function() selected[name]=not selected[name]; x.Text=(selected[name] and "[x] " or "[ ] ")..tostring(name); refresh(true) end)
+                    end
+                end)
+                refresh(false)
+                return {Set=function(_,v) selected={}; for _,name in ipairs(v or {}) do selected[name]=true end; refresh(false) end}
+            end
+            function sub:AddKeybind(o)
+                o=o or {}
+                local key=o.Default or Enum.KeyCode.RightControl
+                local b=Instance.new("TextButton")
+                b.Size=UDim2.new(1,-8,0,36)
+                b.Text=tostring(o.Name or "Keybind")..": "..key.Name
+                b.TextSize=12; b.Font=Enum.Font.Gotham; b.TextColor3=Color3.fromRGB(235,235,240)
+                b.BackgroundColor3=Color3.fromRGB(35,35,44); b.BorderSizePixel=0; b.Parent=scroll; corner(b,6)
+                UIS.InputBegan:Connect(function(input,gp) if not gp and input.KeyCode==key and o.OnPress then task.spawn(o.OnPress) end end)
+                return b
+            end
+
+            btn.MouseButton1Click:Connect(function()
+                for _,x in ipairs(subButtons) do x.body.Visible=false; x.button.BackgroundColor3=Color3.fromRGB(35,35,44) end
+                for _,x in ipairs(subButtons) do if x.button==btn then x.body.Visible=true; x.button.BackgroundColor3=Color3.fromRGB(55,70,105) end end
+            end)
+            if #subButtons==1 then btn.BackgroundColor3=Color3.fromRGB(55,70,105) end
+            return sub
+        end
+
+        function window:AddTab(o)
+            o=o or {}
+            local page=Instance.new("Frame")
+            page.Name="Page"..tostring(#self._tabs+1)
+            page.Size=UDim2.fromScale(1,1)
+            page.BackgroundTransparency=1
+            page.Visible=false
+            page.Parent=pages
+            local subButtons={}
+            local btn=Instance.new("TextButton")
+            btn.Size=UDim2.new(1,0,0,38)
+            btn.Text=tostring(o.Name or "Tab")
+            btn.TextSize=12; btn.Font=Enum.Font.GothamSemibold
+            btn.TextColor3=Color3.fromRGB(220,220,225)
+            btn.BackgroundColor3=Color3.fromRGB(35,35,44)
+            btn.BorderSizePixel=0; btn.Parent=tabBar; corner(btn,6)
+            local tab={_page=page,_button=btn}
+            function tab:AddSubTab(name) return makeSub(page,subButtons,name) end
+            table.insert(self._tabs,tab)
+            btn.MouseButton1Click:Connect(function()
+                for _,t in ipairs(self._tabs) do t._page.Visible=false; t._button.BackgroundColor3=Color3.fromRGB(35,35,44) end
+                page.Visible=true; btn.BackgroundColor3=Color3.fromRGB(55,70,105)
+            end)
+            if #self._tabs==1 then page.Visible=true; btn.BackgroundColor3=Color3.fromRGB(55,70,105) end
+            return tab
+        end
+
+        close.MouseButton1Click:Connect(function() gui.Enabled=false end)
+        return window
+    end
+end
 
 -- ==============================================================================
 -- RE-EXECUTION GUARD + RESOURCE TRACKING
@@ -60,6 +415,7 @@ local Window = Library:CreateWindow({
 -- ==============================================================================
 -- SERVICES & SINGLETONS
 -- ==============================================================================
+local findHum
 local Players             = game:GetService("Players")
 local RS                  = game:GetService("ReplicatedStorage")
 local ReplicatedStorage   = RS
@@ -134,7 +490,7 @@ end
 -- CHARACTER HELPERS
 -- ==============================================================================
 local function findChar() return LP.Character end
-local function findHum()
+findHum = function()
     local ch = LP.Character
     return ch and ch:FindFirstChildOfClass("Humanoid")
 end
