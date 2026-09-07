@@ -1,397 +1,7 @@
--- ============================================================================
--- STANDALONE OXIDE UI
--- No external OxideLib/ScriptLoader is required.
--- ============================================================================
-local UIS = game:GetService("UserInputService")
-local LP0 = game:GetService("Players").LocalPlayer
-
-local Library = rawget(_G, "OxideLib")
-
-if not Library or type(Library.CreateWindow) ~= "function" then
-    Library = {}
-
-    local function getParent()
-        return LP0:WaitForChild("PlayerGui")
-    end
-
-    local function corner(obj, radius)
-        local c = Instance.new("UICorner")
-        c.CornerRadius = UDim.new(0, radius or 6)
-        c.Parent = obj
-    end
-
-    local function makeText(parent, text, size, bold)
-        local l = Instance.new("TextLabel")
-        l.BackgroundTransparency = 1
-        l.Text = tostring(text or "")
-        l.TextSize = size or 14
-        l.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
-        l.TextXAlignment = Enum.TextXAlignment.Left
-        l.TextColor3 = Color3.fromRGB(235,235,240)
-        l.Parent = parent
-        return l
-    end
-
-    function Library:CreateWindow(opts)
-        opts = opts or {}
-        local parent = getParent()
-        local old = parent:FindFirstChild("OxideStandaloneUI")
-        if old then pcall(function() old:Destroy() end) end
-
-        local gui = Instance.new("ScreenGui")
-        gui.Name = "OxideStandaloneUI"
-        gui.ResetOnSpawn = false
-        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        gui.Parent = parent
-
-        local root = Instance.new("Frame")
-        root.Size = UDim2.fromOffset(720, 500)
-        root.Position = UDim2.new(0.5, -360, 0.5, -250)
-        root.BackgroundColor3 = Color3.fromRGB(18,18,23)
-        root.BorderSizePixel = 0
-        root.Parent = gui
-        corner(root,10)
-
-        local top = Instance.new("Frame")
-        top.Size = UDim2.new(1,0,0,48)
-        top.BackgroundColor3 = Color3.fromRGB(25,25,32)
-        top.BorderSizePixel = 0
-        top.Parent = root
-        corner(top,10)
-
-        local title = makeText(top, opts.Name or "Oxide HUB", 16, true)
-        title.Position = UDim2.fromOffset(16,5)
-        title.Size = UDim2.new(1,-120,0,22)
-        local subTitle = makeText(top, "Standalone UI", 11, false)
-        subTitle.TextColor3 = Color3.fromRGB(150,150,160)
-        subTitle.Position = UDim2.fromOffset(16,27)
-        subTitle.Size = UDim2.new(1,-120,0,16)
-
-        local close = Instance.new("TextButton")
-        close.Size = UDim2.fromOffset(34,30)
-        close.Position = UDim2.new(1,-42,0,9)
-        close.Text = "X"
-        close.TextSize = 14
-        close.Font = Enum.Font.GothamBold
-        close.TextColor3 = Color3.fromRGB(240,240,240)
-        close.BackgroundColor3 = Color3.fromRGB(45,45,54)
-        close.BorderSizePixel = 0
-        close.Parent = top
-        corner(close,7)
-
-        local tabBar = Instance.new("ScrollingFrame")
-        tabBar.Size = UDim2.new(0,150,1,-58)
-        tabBar.Position = UDim2.fromOffset(8,55)
-        tabBar.BackgroundColor3 = Color3.fromRGB(22,22,28)
-        tabBar.BorderSizePixel = 0
-        tabBar.ScrollBarThickness = 4
-        tabBar.AutomaticCanvasSize = Enum.AutomaticSize.Y
-        tabBar.CanvasSize = UDim2.new()
-        tabBar.Parent = root
-        corner(tabBar,8)
-        local tabList = Instance.new("UIListLayout")
-        tabList.Padding = UDim.new(0,5)
-        tabList.Parent = tabBar
-        local tabPad = Instance.new("UIPadding")
-        tabPad.PaddingTop = UDim.new(0,8)
-        tabPad.PaddingLeft = UDim.new(0,7)
-        tabPad.PaddingRight = UDim.new(0,7)
-        tabPad.PaddingBottom = UDim.new(0,8)
-        tabPad.Parent = tabBar
-
-        local pages = Instance.new("Frame")
-        pages.Size = UDim2.new(1,-170,1,-58)
-        pages.Position = UDim2.fromOffset(162,55)
-        pages.BackgroundTransparency = 1
-        pages.Parent = root
-
-        local window = { _tabs = {}, _gui = gui, _root = root, _destroyed = false }
-
-        function window:Toggle()
-            if gui then gui.Enabled = not gui.Enabled end
-        end
-        function window:Destroy()
-            self._destroyed = true
-            if gui then pcall(function() gui:Destroy() end) end
-        end
-        function window:Notify(data)
-            data = data or {}
-            local n = Instance.new("TextLabel")
-            n.Size = UDim2.fromOffset(320,58)
-            n.Position = UDim2.new(1,-335,1,-70)
-            n.BackgroundColor3 = Color3.fromRGB(30,30,38)
-            n.BorderSizePixel = 0
-            n.TextColor3 = Color3.fromRGB(240,240,245)
-            n.TextSize = 13
-            n.Font = Enum.Font.Gotham
-            n.TextXAlignment = Enum.TextXAlignment.Left
-            n.TextWrapped = true
-            n.Text = "  " .. tostring(data.Title or "Oxide") .. "\n  " .. tostring(data.Content or "")
-            n.Parent = gui
-            corner(n,8)
-            task.delay(tonumber(data.Duration) or 2.5, function()
-                if n and n.Parent then n:Destroy() end
-            end)
-        end
-
-        local function makeSub(page, subButtons, name)
-            local sub = {}
-            local header = page:FindFirstChild("SubHeader")
-            local body = page:FindFirstChild("SubBody")
-            if not header then
-                header = Instance.new("Frame")
-                header.Name = "SubHeader"
-                header.Size = UDim2.new(1,0,0,38)
-                header.BackgroundTransparency = 1
-                header.Parent = page
-                local hl = Instance.new("UIListLayout")
-                hl.FillDirection = Enum.FillDirection.Horizontal
-                hl.Padding = UDim.new(0,5)
-                hl.Parent = header
-
-                body = Instance.new("Frame")
-                body.Name = "SubBody"
-                body.Size = UDim2.new(1,0,1,-42)
-                body.Position = UDim2.fromOffset(0,42)
-                body.BackgroundColor3 = Color3.fromRGB(22,22,28)
-                body.BorderSizePixel = 0
-                body.Parent = page
-                corner(body,8)
-            end
-
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.fromOffset(115,32)
-            btn.Text = tostring(name)
-            btn.TextSize = 12
-            btn.Font = Enum.Font.GothamSemibold
-            btn.TextColor3 = Color3.fromRGB(220,220,225)
-            btn.BackgroundColor3 = Color3.fromRGB(35,35,44)
-            btn.BorderSizePixel = 0
-            btn.Parent = header
-            corner(btn,6)
-            table.insert(subButtons, {button=btn, body=nil})
-
-            local scroll = Instance.new("ScrollingFrame")
-            scroll.Name = "Body_" .. tostring(name)
-            scroll.Size = UDim2.new(1,-16,1,-16)
-            scroll.Position = UDim2.fromOffset(8,8)
-            scroll.BackgroundTransparency = 1
-            scroll.BorderSizePixel = 0
-            scroll.ScrollBarThickness = 5
-            scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-            scroll.CanvasSize = UDim2.new()
-            scroll.Parent = body
-            subButtons[#subButtons].body = scroll
-
-            local list = Instance.new("UIListLayout")
-            list.Padding = UDim.new(0,6)
-            list.Parent = scroll
-            local pad = Instance.new("UIPadding")
-            pad.PaddingBottom = UDim.new(0,10)
-            pad.Parent = scroll
-
-            sub._body = scroll
-
-            local function label(text, size, bold)
-                local l = makeText(scroll,text,size,bold)
-                l.Size = UDim2.new(1,-8,0,28)
-                l.TextWrapped = true
-                return l
-            end
-
-            function sub:AddSection(o)
-                local l=label(o and o.Name or "Section",13,true)
-                l.TextColor3=Color3.fromRGB(170,170,185)
-                return l
-            end
-            function sub:AddDivider()
-                local f=Instance.new("Frame")
-                f.Size=UDim2.new(1,-8,0,1)
-                f.BackgroundColor3=Color3.fromRGB(55,55,65)
-                f.BorderSizePixel=0
-                f.Parent=scroll
-                return f
-            end
-            function sub:AddLabel(o)
-                local l=label(o and o.Text or "",12,false)
-                return {Set=function(_,v) l.Text=tostring(v) end}
-            end
-            function sub:AddToggle(o)
-                o=o or {}
-                local state=o.Default==true
-                local b=Instance.new("TextButton")
-                b.Size=UDim2.new(1,-8,0,36)
-                b.Text=""
-                b.BorderSizePixel=0
-                b.Parent=scroll
-                corner(b,6)
-                local l=makeText(b,"",12,true)
-                l.Position=UDim2.fromOffset(10,0)
-                l.Size=UDim2.new(1,-20,1,0)
-                local function set(v,fire)
-                    state=not not v
-                    b.BackgroundColor3=state and Color3.fromRGB(45,95,65) or Color3.fromRGB(35,35,44)
-                    l.Text=(state and "ON  " or "OFF ")..tostring(o.Name or "Toggle")
-                    if fire and o.Callback then task.spawn(o.Callback,state) end
-                end
-                b.MouseButton1Click:Connect(function() set(not state,true) end)
-                set(state,false)
-                return {Set=set,Get=function() return state end}
-            end
-            function sub:AddButton(o)
-                o=o or {}
-                local b=Instance.new("TextButton")
-                b.Size=UDim2.new(1,-8,0,36)
-                b.Text=tostring(o.Name or "Button")
-                b.TextSize=12
-                b.Font=Enum.Font.GothamSemibold
-                b.TextColor3=Color3.fromRGB(240,240,245)
-                b.BackgroundColor3=Color3.fromRGB(45,45,58)
-                b.BorderSizePixel=0
-                b.Parent=scroll
-                corner(b,6)
-                b.MouseButton1Click:Connect(function() if o.Callback then task.spawn(o.Callback) end end)
-                return b
-            end
-            function sub:AddInput(o)
-                o=o or {}
-                local wrap=Instance.new("Frame")
-                wrap.Size=UDim2.new(1,-8,0,58)
-                wrap.BackgroundTransparency=1
-                wrap.Parent=scroll
-                local l=makeText(wrap,o.Name or "Input",11,false)
-                l.Size=UDim2.new(1,0,0,18)
-                local box=Instance.new("TextBox")
-                box.Size=UDim2.new(1,0,0,36)
-                box.Position=UDim2.fromOffset(0,20)
-                box.Text=tostring(o.Default or "")
-                box.PlaceholderText=tostring(o.Placeholder or "")
-                box.TextSize=12
-                box.Font=Enum.Font.Gotham
-                box.TextColor3=Color3.fromRGB(235,235,240)
-                box.PlaceholderColor3=Color3.fromRGB(130,130,140)
-                box.BackgroundColor3=Color3.fromRGB(32,32,40)
-                box.BorderSizePixel=0
-                box.ClearTextOnFocus=false
-                box.Parent=wrap
-                corner(box,6)
-                box.FocusLost:Connect(function() if o.Callback then task.spawn(o.Callback,box.Text) end end)
-                return box
-            end
-            function sub:AddSlider(o)
-                o=o or {}
-                local min,max=tonumber(o.Min) or 0,tonumber(o.Max) or 100
-                local value=tonumber(o.Default) or min
-                local b=Instance.new("TextButton")
-                b.Size=UDim2.new(1,-8,0,42)
-                b.Text=""
-                b.BackgroundColor3=Color3.fromRGB(32,32,40)
-                b.BorderSizePixel=0
-                b.Parent=scroll
-                corner(b,6)
-                local l=makeText(b,"",11,false)
-                l.Position=UDim2.fromOffset(10,0); l.Size=UDim2.new(1,-20,0,20)
-                local bar=Instance.new("Frame")
-                bar.Size=UDim2.new(1,-20,0,6); bar.Position=UDim2.fromOffset(10,28)
-                bar.BackgroundColor3=Color3.fromRGB(55,55,65); bar.BorderSizePixel=0; bar.Parent=b; corner(bar,3)
-                local fill=Instance.new("Frame")
-                fill.BackgroundColor3=Color3.fromRGB(85,120,220); fill.BorderSizePixel=0; fill.Parent=bar; corner(fill,3)
-                local function set(v,fire)
-                    value=math.clamp(tonumber(v) or min,min,max)
-                    local a=(value-min)/((max-min)==0 and 1 or (max-min))
-                    fill.Size=UDim2.new(a,0,1,0)
-                    l.Text=tostring(o.Name or "Slider")..": "..tostring(math.floor(value+0.5))..tostring(o.Suffix or "")
-                    if fire and o.Callback then task.spawn(o.Callback,value) end
-                end
-                b.MouseButton1Click:Connect(function() set(value>=max and min or value+math.max(1,(max-min)/10),true) end)
-                set(value,false)
-                return {Set=set,Get=function() return value end}
-            end
-            function sub:AddMultiDropdown(o)
-                o=o or {}
-                local selected={}
-                local opts=o.Options or {}
-                local b=Instance.new("TextButton")
-                b.Size=UDim2.new(1,-8,0,38)
-                b.Text=tostring(o.Name or "Dropdown")..": none"
-                b.TextSize=11; b.Font=Enum.Font.Gotham
-                b.TextColor3=Color3.fromRGB(235,235,240)
-                b.BackgroundColor3=Color3.fromRGB(32,32,40)
-                b.BorderSizePixel=0; b.Parent=scroll; corner(b,6)
-                local popup=nil
-                local function refresh(fire)
-                    local names={}
-                    for k,v in pairs(selected) do if v then table.insert(names,k) end end
-                    table.sort(names)
-                    b.Text=tostring(o.Name or "Dropdown")..": "..(#names==0 and "none" or table.concat(names,", "))
-                    if fire and o.Callback then task.spawn(o.Callback,names) end
-                end
-                local function closePopup() if popup then popup:Destroy(); popup=nil end end
-                b.MouseButton1Click:Connect(function()
-                    if popup then closePopup(); return end
-                    popup=Instance.new("Frame")
-                    popup.Size=UDim2.new(1,-8,0,math.min(220,math.max(40,#opts*30+8)))
-                    popup.BackgroundColor3=Color3.fromRGB(28,28,36); popup.BorderSizePixel=0; popup.ZIndex=20; popup.Parent=scroll; corner(popup,6)
-                    local pl=Instance.new("UIListLayout"); pl.Padding=UDim.new(0,2); pl.Parent=popup
-                    for _,name in ipairs(opts) do
-                        local x=Instance.new("TextButton"); x.Size=UDim2.new(1,-8,0,28); x.Text=(selected[name] and "[x] " or "[ ] ")..tostring(name); x.TextSize=11; x.Font=Enum.Font.Gotham; x.TextColor3=Color3.fromRGB(235,235,240); x.BackgroundTransparency=1; x.ZIndex=21; x.Parent=popup
-                        x.MouseButton1Click:Connect(function() selected[name]=not selected[name]; x.Text=(selected[name] and "[x] " or "[ ] ")..tostring(name); refresh(true) end)
-                    end
-                end)
-                refresh(false)
-                return {Set=function(_,v) selected={}; for _,name in ipairs(v or {}) do selected[name]=true end; refresh(false) end}
-            end
-            function sub:AddKeybind(o)
-                o=o or {}
-                local key=o.Default or Enum.KeyCode.RightControl
-                local b=Instance.new("TextButton")
-                b.Size=UDim2.new(1,-8,0,36)
-                b.Text=tostring(o.Name or "Keybind")..": "..key.Name
-                b.TextSize=12; b.Font=Enum.Font.Gotham; b.TextColor3=Color3.fromRGB(235,235,240)
-                b.BackgroundColor3=Color3.fromRGB(35,35,44); b.BorderSizePixel=0; b.Parent=scroll; corner(b,6)
-                UIS.InputBegan:Connect(function(input,gp) if not gp and input.KeyCode==key and o.OnPress then task.spawn(o.OnPress) end end)
-                return b
-            end
-
-            btn.MouseButton1Click:Connect(function()
-                for _,x in ipairs(subButtons) do x.body.Visible=false; x.button.BackgroundColor3=Color3.fromRGB(35,35,44) end
-                for _,x in ipairs(subButtons) do if x.button==btn then x.body.Visible=true; x.button.BackgroundColor3=Color3.fromRGB(55,70,105) end end
-            end)
-            if #subButtons==1 then btn.BackgroundColor3=Color3.fromRGB(55,70,105) end
-            return sub
-        end
-
-        function window:AddTab(o)
-            o=o or {}
-            local page=Instance.new("Frame")
-            page.Name="Page"..tostring(#self._tabs+1)
-            page.Size=UDim2.fromScale(1,1)
-            page.BackgroundTransparency=1
-            page.Visible=false
-            page.Parent=pages
-            local subButtons={}
-            local btn=Instance.new("TextButton")
-            btn.Size=UDim2.new(1,0,0,38)
-            btn.Text=tostring(o.Name or "Tab")
-            btn.TextSize=12; btn.Font=Enum.Font.GothamSemibold
-            btn.TextColor3=Color3.fromRGB(220,220,225)
-            btn.BackgroundColor3=Color3.fromRGB(35,35,44)
-            btn.BorderSizePixel=0; btn.Parent=tabBar; corner(btn,6)
-            local tab={_page=page,_button=btn}
-            function tab:AddSubTab(name) return makeSub(page,subButtons,name) end
-            table.insert(self._tabs,tab)
-            btn.MouseButton1Click:Connect(function()
-                for _,t in ipairs(self._tabs) do t._page.Visible=false; t._button.BackgroundColor3=Color3.fromRGB(35,35,44) end
-                page.Visible=true; btn.BackgroundColor3=Color3.fromRGB(55,70,105)
-            end)
-            if #self._tabs==1 then page.Visible=true; btn.BackgroundColor3=Color3.fromRGB(55,70,105) end
-            return tab
-        end
-
-        close.MouseButton1Click:Connect(function() gui.Enabled=false end)
-        return window
-    end
-end
+```
+-- === HUB STRIP POINT - when deployed to Codeberg the ScriptLoader injects
+--     "local Library = _G.OxideLib" above this line instead. ===
+-- ==============================================================================
 
 -- ==============================================================================
 -- RE-EXECUTION GUARD + RESOURCE TRACKING
@@ -415,7 +25,6 @@ local Window = Library:CreateWindow({
 -- ==============================================================================
 -- SERVICES & SINGLETONS
 -- ==============================================================================
-local findHum
 local Players             = game:GetService("Players")
 local RS                  = game:GetService("ReplicatedStorage")
 local ReplicatedStorage   = RS
@@ -490,7 +99,7 @@ end
 -- CHARACTER HELPERS
 -- ==============================================================================
 local function findChar() return LP.Character end
-findHum = function()
+local function findHum()
     local ch = LP.Character
     return ch and ch:FindFirstChildOfClass("Humanoid")
 end
@@ -518,33 +127,6 @@ local function GetPlotPenPosition()
         return detector.Position + Vector3.new(0, 1.5, 0)
     end
     return plot and (plot:GetPivot().Position + Vector3.new(0, 3, 0)) or Vector3.new(-72, 5, 65)
-end
-
--- First-stage Drop Zone (for a game/map controlled by the developer).
-local function GetFirstStageDropPosition()
-    local stagesFolder = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Stages")
-    local firstStage = stagesFolder and (stagesFolder:FindFirstChild(STAGE_NAMES[1]) or stagesFolder:GetChildren()[1])
-    if not firstStage then
-        return STAGE_COORDINATES[STAGE_NAMES[1]] + Vector3.new(0, 2, 0)
-    end
-
-    for _, name in ipairs({"DropZone", "EggDropZone", "EggDrop", "DropDetector"}) do
-        local obj = firstStage:FindFirstChild(name, true)
-        if obj then
-            if obj:IsA("BasePart") then
-                return obj.Position + Vector3.new(0, 1.5, 0)
-            elseif obj:IsA("Model") then
-                return obj:GetPivot().Position + Vector3.new(0, 1.5, 0)
-            end
-        end
-    end
-
-    local detector = firstStage:FindFirstChild("Detector", true)
-    if detector and detector:IsA("BasePart") then
-        return detector.Position + Vector3.new(0, 1.5, 0)
-    end
-
-    return firstStage:GetPivot().Position + Vector3.new(0, 2, 0)
 end
 
 local function GetSquatDetector()
@@ -609,6 +191,8 @@ local STAGE_COORDINATES = {
 -- Main : Farm
 local autoFarmEggs            = false
 local autoPlaceEggs           = false
+local stealAndDropMeadow      = false
+local meadowDropPosition      = Vector3.new(0, -2, -50)
 local autoHatchEggs           = false
 local autoEquipBest           = false
 local equipBestInterval       = 15
@@ -973,6 +557,7 @@ end
 local function PlaceAllCarriedEggs()
     local req = GetRemote("PlaceEggRequest")
     if not req then return 0 end
+
     local plot = GetMyPlot()
     local detector = plot and plot:FindFirstChild("Detector")
     if not detector then return 0 end
@@ -1000,60 +585,64 @@ local function PlaceAllCarriedEggs()
         return nil
     end
 
-    local tool = getNextEggTool()
-    if not tool then return 0 end
+    local firstTool = getNextEggTool()
+    if not firstTool then return 0 end
 
     local placedEggs = plot:FindFirstChild("PlacedEggs")
     local currentPlacedCount = placedEggs and #placedEggs:GetChildren() or 0
     local maxCanPlace = math.max(0, 8 - currentPlacedCount)
     if maxCanPlace <= 0 then return 0 end
 
+    -- Move/Teleport to detector center so server recognizes player inside placement zone
     hrp.CFrame = detector.CFrame + Vector3.new(0, 1.5, 0)
     hrp.AssemblyLinearVelocity = Vector3.zero
     task.wait(0.12)
 
     local placed = 0
+    local tool = getNextEggTool()
     while tool and placed < maxCanPlace and not HUB.dead do
         local id = tool:GetAttribute("EggId")
-        if not id then break end
-        hum:EquipTool(tool)
-        task.wait(0.18)
-        local placePos = detector.Position + Vector3.new(math.random(-5, 5), 0.5, math.random(-5, 5))
-        pcall(function() req:FireServer(id, placePos) end)
-        placed = placed + 1
-        task.wait(0.18)
+        if id then
+            hum:EquipTool(tool)
+            task.wait(0.18)
+            local placePos = detector.Position + Vector3.new(math.random(-5, 5), 0.5, math.random(-5, 5))
+            pcall(function() req:FireServer(id, placePos) end)
+            placed = placed + 1
+            task.wait(0.18)
+        else
+            break
+        end
         tool = getNextEggTool()
     end
     return placed
 end
 
--- Drop carried eggs at the first stage.
--- Preferred remote: DropEggRequest / DropEgg.
--- Fallback: PlaceEggRequest at the first-stage Drop Zone; the server must
--- explicitly allow that location for this to create a real shared drop.
-local function DropAllCarriedEggsAtFirstStage()
-    local char = LP.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return 0 end
+local function DropAllCarriedEggsAtMeadow()
+    local req = GetRemote("DropEggRequest")
+    if not req then
+        warn("[Meadow Drop] DropEggRequest not found")
+        Notify("Meadow Drop", "DropEggRequest not found", "Error", 3)
+        return 0
+    end
 
-    local dropPos = GetFirstStageDropPosition()
-    if not dropPos then return 0 end
+    local hum = findHum()
+    if not hum then return 0 end
 
-    local dropRemote = GetRemote("DropEggRequest") or GetRemote("DropEgg")
-    local placeRemote = GetRemote("PlaceEggRequest")
-    if not dropRemote and not placeRemote then return 0 end
+    SafeTeleport(meadowDropPosition)
+    task.wait(0.15)
 
-    local function getNextEggTool()
-        if LP.Character then
-            for _, t in ipairs(LP.Character:GetChildren()) do
+    local function getEggTool()
+        local ch = LP.Character
+        if ch then
+            for _, t in ipairs(ch:GetChildren()) do
                 if t:IsA("Tool") and (t:GetAttribute("IsEggTool") == true or t:GetAttribute("EggId") ~= nil) then
                     return t
                 end
             end
         end
-        if LP:FindFirstChild("Backpack") then
-            for _, t in ipairs(LP.Backpack:GetChildren()) do
+        local bp = LP:FindFirstChild("Backpack")
+        if bp then
+            for _, t in ipairs(bp:GetChildren()) do
                 if t:IsA("Tool") and (t:GetAttribute("IsEggTool") == true or t:GetAttribute("EggId") ~= nil) then
                     return t
                 end
@@ -1062,32 +651,15 @@ local function DropAllCarriedEggsAtFirstStage()
         return nil
     end
 
-    local tool = getNextEggTool()
-    if not tool then return 0 end
-
-    TravelToDestination(dropPos, glideSpeed or 200, true)
-    hrp.CFrame = CFrame.new(dropPos)
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
-    task.wait(0.2)
-
     local dropped = 0
+    local tool = getEggTool()
     while tool and not HUB.dead do
-        local id = tool:GetAttribute("EggId")
-        if not id then break end
-
-        hum:EquipTool(tool)
+        pcall(function() hum:EquipTool(tool) end)
         task.wait(0.12)
-
-        if dropRemote then
-            pcall(function() dropRemote:FireServer(id, dropPos) end)
-        else
-            pcall(function() placeRemote:FireServer(id, dropPos) end)
-        end
-
-        dropped = dropped + 1
-        task.wait(0.25)
-        tool = getNextEggTool()
+        pcall(function() req:FireServer() end)
+        dropped += 1
+        task.wait(0.2)
+        tool = getEggTool()
     end
 
     return dropped
@@ -1173,8 +745,9 @@ local function StealEggTarget(targetEgg)
 
     EnsureSavedReturnPosition()
     local eggPos = targetEgg.pos
-    local dropPos = GetFirstStageDropPosition()
+    local penPos = GetPlotPenPosition()
     local speed = glideSpeed or 200
+    local dropAtMeadow = stealAndDropMeadow == true
 
     -- 1. Travel to target egg
     local isInstantTP = (stealMovementMethod == "Instant Safe TP")
@@ -1235,46 +808,34 @@ local function StealEggTarget(targetEgg)
         task.wait(0.03)
     end
 
-    -- 3. Travel to first-stage Drop Zone
-    local droppedCount = 0
+    -- 3. Drop at Meadow or place in own plot
     if carried or isPlayerCarryingEgg() then
-        if dropPos then
-            TravelToDestination(dropPos, speed, true)
-            if isInstantTP then
-                hrp.CFrame = CFrame.new(dropPos)
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                task.wait(0.2)
-            else
-                task.wait(0.12)
+        if dropAtMeadow then
+            local dropped = DropAllCarriedEggsAtMeadow()
+            if dropped > 0 then
+                Notify("Meadow Drop", "Dropped " .. tostring(dropped) .. " egg(s)", "Success", 2)
             end
-        end
+        else
+            TravelToDestination(penPos, speed, true)
+            task.wait(0.12)
+            local placedCount = PlaceAllCarriedEggs()
+            task.wait(0.1)
 
-        -- 4. Drop/place egg at first-stage Drop Zone
-        droppedCount = DropAllCarriedEggsAtFirstStage()
-        task.wait(0.1)
-
-        -- Webhook Notification
-        if webhookEnabled and webhookURL ~= "" and droppedCount > 0 then
-            local shouldNotify = true
-            if #webhookRarities > 0 and not isRarityAllowed(targetEgg.rarity, webhookRarities) then
-                shouldNotify = false
-            end
-            if shouldNotify and webhookMutatedOnly and (targetEgg.mutation or "") == "" then
-                shouldNotify = false
-            end
-            if shouldNotify and webhookMinCPS > 0 and (targetEgg.cps or 0) < webhookMinCPS then
-                shouldNotify = false
-            end
-            if shouldNotify then
-                task.spawn(function()
-                    SendDiscordWebhook(webhookURL, {
-                        name = targetEgg.name,
-                        rarity = targetEgg.rarity,
-                        mutation = targetEgg.mutation,
-                        cps = targetEgg.cps
-                    })
-                end)
+            if webhookEnabled and webhookURL ~= "" and placedCount > 0 then
+                local shouldNotify = true
+                if #webhookRarities > 0 and not isRarityAllowed(targetEgg.rarity, webhookRarities) then shouldNotify = false end
+                if shouldNotify and webhookMutatedOnly and (targetEgg.mutation or "") == "" then shouldNotify = false end
+                if shouldNotify and webhookMinCPS > 0 and (targetEgg.cps or 0) < webhookMinCPS then shouldNotify = false end
+                if shouldNotify then
+                    task.spawn(function()
+                        SendDiscordWebhook(webhookURL, {
+                            name = targetEgg.name,
+                            rarity = targetEgg.rarity,
+                            mutation = targetEgg.mutation,
+                            cps = targetEgg.cps
+                        })
+                    end)
+                end
             end
         end
     end
@@ -1287,7 +848,7 @@ local function StealEggTarget(targetEgg)
             task.wait(0.1)
             StartSquatTraining()
         end
-    elseif savedReturnCFrame then
+    elseif savedReturnCFrame and not stealAndDropMeadow then
         task.wait(0.05)
         SafeTeleport(savedReturnCFrame.Position)
         local h = findHRP()
@@ -1541,7 +1102,7 @@ local lastEquipBestTime = 0
 task.spawn(function()
     while not HUB.dead do
         local loopWait = 0.05
-        local shouldFarm = (autoFarmEggs == true or autoStealEnabled == true)
+        local shouldFarm = (autoFarmEggs == true or autoStealEnabled == true or stealAndDropMeadow == true)
         if shouldFarm and not isStealingNow then
             local candidates = GetAllSpawnedEggs(nil, farmRarities)
             local target = candidates[1]
@@ -1559,12 +1120,12 @@ task.spawn(function()
     end
 end)
 
--- Auto Drop Eggs Loop
+-- Auto Place Eggs Loop
 task.spawn(function()
     while not HUB.dead do
         if autoPlaceEggs and not isStealingNow then
             if hasAnyEggToPlace() then
-                pcall(DropAllCarriedEggsAtFirstStage)
+                pcall(PlaceAllCarriedEggs)
             end
         end
         task.wait(1.5)
@@ -1605,7 +1166,7 @@ end)
 -- 5. Training & 2x Bonus Loop
 task.spawn(function()
     while not HUB.dead do
-        local shouldFarm = (autoFarmEggs == true or autoStealEnabled == true)
+        local shouldFarm = (autoFarmEggs == true or autoStealEnabled == true or stealAndDropMeadow == true)
         if autoTrain and not shouldFarm and not isPlayerCarryingEgg() then
             local det = GetSquatDetector()
             local hrp = findHRP()
@@ -2017,6 +1578,34 @@ local ProgressionSub = MainTab:AddSubTab("Progression")
 local StatusSub      = MainTab:AddSubTab("Status")
 
 -- Farm SubTab
+FarmSub:AddSection({
+    Name = "Steal & Drop"
+})
+
+FarmSub:AddToggle({
+    Name = "Steal Eggs & Drop at Meadow",
+    Default = false,
+    Flag = "steal_drop_meadow",
+    Callback = safeCallback(function(v)
+        stealAndDropMeadow = v
+        Notify(
+            "Steal & Drop",
+            v and "Steal eggs -> Meadow" or "Disabled",
+            v and "Success" or "Info",
+            2
+        )
+    end)
+})
+
+FarmSub:AddButton({
+    Name = "Drop Carried Eggs at Meadow",
+    Primary = true,
+    Callback = safeCallback(function()
+        local dropped = DropAllCarriedEggsAtMeadow()
+        Notify("Meadow Drop", "Dropped " .. tostring(dropped) .. " egg(s)", dropped > 0 and "Success" or "Error", 2.5)
+    end)
+})
+
 FarmSub:AddToggle({
     Name = "Auto Farm Eggs", Default = false, Flag = "auto_farm_eggs",
     Callback = safeCallback(function(v)
@@ -2032,10 +1621,10 @@ FarmSub:AddToggle({
 })
 
 FarmSub:AddToggle({
-    Name = "Auto Drop Eggs (First Stage)", Default = false, Flag = "auto_place_eggs",
+    Name = "Auto Place Eggs", Default = false, Flag = "auto_place_eggs",
     Callback = function(v)
         autoPlaceEggs = v
-        Notify("Auto Drop Eggs", v and "Enabled (first-stage Drop Zone)" or "Disabled", v and "Success" or "Error")
+        Notify("Auto Place Eggs", v and "Enabled (auto-equipping & placing)" or "Disabled", v and "Success" or "Error")
     end
 })
 
@@ -2360,3 +1949,4 @@ HUB.Unload = function()
 end
 
 Notify("Oxide HUB", "Jump for Pets script loaded successfully!", "Success", 3.5)
+```
