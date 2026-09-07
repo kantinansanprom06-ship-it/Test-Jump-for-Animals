@@ -1,6 +1,42 @@
--- === HUB STRIP POINT - when deployed to Codeberg the ScriptLoader injects
---     "local Library = _G.OxideLib" above this line instead. ===
--- ==============================================================================
+-- === Oxide HUB standalone compatibility ===
+-- If ScriptLoader already provides _G.OxideLib, use it.
+-- If this file is executed directly from GitHub, provide a safe no-op UI
+-- compatibility layer so the core script does not crash on CreateWindow.
+-- ============================================================================
+local Library = rawget(_G, "OxideLib")
+
+if not Library or type(Library.CreateWindow) ~= "function" then
+    local function noop() end
+
+    local function makeSubTab()
+        local t = {}
+        function t:AddSection(...) return t end
+        function t:AddDivider(...) return t end
+        function t:AddLabel(...) return { Set = noop } end
+        function t:AddToggle(...) return t end
+        function t:AddButton(...) return t end
+        function t:AddInput(...) return t end
+        function t:AddSlider(...) return t end
+        function t:AddMultiDropdown(...) return t end
+        function t:AddKeybind(...) return t end
+        function t:AddSubTab(...) return makeSubTab() end
+        return t
+    end
+
+    Library = {
+        CreateWindow = function(_, opts)
+            warn("[Oxide HUB] _G.OxideLib not found. Running in standalone/headless mode.")
+            local w = {}
+            function w:AddTab(...) return makeSubTab() end
+            function w:Notify(...) warn("[Oxide HUB] " .. tostring((select(2, ...)) or "")) end
+            function w:Toggle(...) end
+            function w:Destroy() end
+            return w
+        end
+    }
+end
+
+-- ============================================================================
 
 -- ==============================================================================
 -- RE-EXECUTION GUARD + RESOURCE TRACKING
@@ -128,6 +164,33 @@ local function GetPlotPenPosition()
     return plot and (plot:GetPivot().Position + Vector3.new(0, 3, 0)) or Vector3.new(-72, 5, 65)
 end
 
+-- First-stage Drop Zone (for a game/map controlled by the developer).
+local function GetFirstStageDropPosition()
+    local stagesFolder = Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("Stages")
+    local firstStage = stagesFolder and (stagesFolder:FindFirstChild(STAGE_NAMES[1]) or stagesFolder:GetChildren()[1])
+    if not firstStage then
+        return STAGE_COORDINATES[STAGE_NAMES[1]] + Vector3.new(0, 2, 0)
+    end
+
+    for _, name in ipairs({"DropZone", "EggDropZone", "EggDrop", "DropDetector"}) do
+        local obj = firstStage:FindFirstChild(name, true)
+        if obj then
+            if obj:IsA("BasePart") then
+                return obj.Position + Vector3.new(0, 1.5, 0)
+            elseif obj:IsA("Model") then
+                return obj:GetPivot().Position + Vector3.new(0, 1.5, 0)
+            end
+        end
+    end
+
+    local detector = firstStage:FindFirstChild("Detector", true)
+    if detector and detector:IsA("BasePart") then
+        return detector.Position + Vector3.new(0, 1.5, 0)
+    end
+
+    return firstStage:GetPivot().Position + Vector3.new(0, 2, 0)
+end
+
 local function GetSquatDetector()
     local plot = GetMyPlot()
     local sz = plot and plot:FindFirstChild("SquatZone")
@@ -246,7 +309,6 @@ local autoClaimAllRewards     = false
 local autoSell                = false
 local autoEquipBestTrail      = false
 local autoEquipBestCoil       = false
-local autoPlaceEggs           = true
 local selectedStealRarities   = {}
 local selectedStealAreas      = {}
 
@@ -555,7 +617,6 @@ end
 local function PlaceAllCarriedEggs()
     local req = GetRemote("PlaceEggRequest")
     if not req then return 0 end
-
     local plot = GetMyPlot()
     local detector = plot and plot:FindFirstChild("Detector")
     if not detector then return 0 end
@@ -583,36 +644,97 @@ local function PlaceAllCarriedEggs()
         return nil
     end
 
-    local firstTool = getNextEggTool()
-    if not firstTool then return 0 end
+    local tool = getNextEggTool()
+    if not tool then return 0 end
 
     local placedEggs = plot:FindFirstChild("PlacedEggs")
     local currentPlacedCount = placedEggs and #placedEggs:GetChildren() or 0
     local maxCanPlace = math.max(0, 8 - currentPlacedCount)
     if maxCanPlace <= 0 then return 0 end
 
-    -- Move/Teleport to detector center so server recognizes player inside placement zone
     hrp.CFrame = detector.CFrame + Vector3.new(0, 1.5, 0)
     hrp.AssemblyLinearVelocity = Vector3.zero
     task.wait(0.12)
 
     local placed = 0
-    local tool = getNextEggTool()
     while tool and placed < maxCanPlace and not HUB.dead do
         local id = tool:GetAttribute("EggId")
-        if id then
-            hum:EquipTool(tool)
-            task.wait(0.18)
-            local placePos = detector.Position + Vector3.new(math.random(-5, 5), 0.5, math.random(-5, 5))
-            pcall(function() req:FireServer(id, placePos) end)
-            placed = placed + 1
-            task.wait(0.18)
-        else
-            break
-        end
+        if not id then break end
+        hum:EquipTool(tool)
+        task.wait(0.18)
+        local placePos = detector.Position + Vector3.new(math.random(-5, 5), 0.5, math.random(-5, 5))
+        pcall(function() req:FireServer(id, placePos) end)
+        placed = placed + 1
+        task.wait(0.18)
         tool = getNextEggTool()
     end
     return placed
+end
+
+-- Drop carried eggs at the first stage.
+-- Preferred remote: DropEggRequest / DropEgg.
+-- Fallback: PlaceEggRequest at the first-stage Drop Zone; the server must
+-- explicitly allow that location for this to create a real shared drop.
+local function DropAllCarriedEggsAtFirstStage()
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return 0 end
+
+    local dropPos = GetFirstStageDropPosition()
+    if not dropPos then return 0 end
+
+    local dropRemote = GetRemote("DropEggRequest") or GetRemote("DropEgg")
+    local placeRemote = GetRemote("PlaceEggRequest")
+    if not dropRemote and not placeRemote then return 0 end
+
+    local function getNextEggTool()
+        if LP.Character then
+            for _, t in ipairs(LP.Character:GetChildren()) do
+                if t:IsA("Tool") and (t:GetAttribute("IsEggTool") == true or t:GetAttribute("EggId") ~= nil) then
+                    return t
+                end
+            end
+        end
+        if LP:FindFirstChild("Backpack") then
+            for _, t in ipairs(LP.Backpack:GetChildren()) do
+                if t:IsA("Tool") and (t:GetAttribute("IsEggTool") == true or t:GetAttribute("EggId") ~= nil) then
+                    return t
+                end
+            end
+        end
+        return nil
+    end
+
+    local tool = getNextEggTool()
+    if not tool then return 0 end
+
+    TravelToDestination(dropPos, glideSpeed or 200, true)
+    hrp.CFrame = CFrame.new(dropPos)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    task.wait(0.2)
+
+    local dropped = 0
+    while tool and not HUB.dead do
+        local id = tool:GetAttribute("EggId")
+        if not id then break end
+
+        hum:EquipTool(tool)
+        task.wait(0.12)
+
+        if dropRemote then
+            pcall(function() dropRemote:FireServer(id, dropPos) end)
+        else
+            pcall(function() placeRemote:FireServer(id, dropPos) end)
+        end
+
+        dropped = dropped + 1
+        task.wait(0.25)
+        tool = getNextEggTool()
+    end
+
+    return dropped
 end
 
 local function SendDiscordWebhook(url, eggData)
@@ -695,7 +817,7 @@ local function StealEggTarget(targetEgg)
 
     EnsureSavedReturnPosition()
     local eggPos = targetEgg.pos
-    local penPos = GetPlotPenPosition()
+    local dropPos = GetFirstStageDropPosition()
     local speed = glideSpeed or 200
 
     -- 1. Travel to target egg
@@ -757,33 +879,27 @@ local function StealEggTarget(targetEgg)
         task.wait(0.03)
     end
 
-    -- 3. Travel back to player plot pen
+    -- 3. Travel to first-stage Drop Zone
+    local droppedCount = 0
     if carried or isPlayerCarryingEgg() then
-        if isInstantTP then
-            local tWait = os.clock()
-            while os.clock() - tWait < 0.6 and not HUB.dead do
-                hrp.CFrame = CFrame.new(eggPos + Vector3.new(0, 1.0, 0))
+        if dropPos then
+            TravelToDestination(dropPos, speed, true)
+            if isInstantTP then
+                hrp.CFrame = CFrame.new(dropPos)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
-                task.wait(0.04)
+                task.wait(0.2)
+            else
+                task.wait(0.12)
             end
         end
-        TravelToDestination(penPos, speed, true)
-        if isInstantTP then
-            hrp.CFrame = CFrame.new(penPos)
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            task.wait(0.2)
-        else
-            task.wait(0.12)
-        end
 
-        -- 4. Place egg in pen
-        local placedCount = PlaceAllCarriedEggs()
+        -- 4. Drop/place egg at first-stage Drop Zone
+        droppedCount = DropAllCarriedEggsAtFirstStage()
         task.wait(0.1)
 
         -- Webhook Notification
-        if webhookEnabled and webhookURL ~= "" and placedCount > 0 then
+        if webhookEnabled and webhookURL ~= "" and droppedCount > 0 then
             local shouldNotify = true
             if #webhookRarities > 0 and not isRarityAllowed(targetEgg.rarity, webhookRarities) then
                 shouldNotify = false
@@ -1087,12 +1203,12 @@ task.spawn(function()
     end
 end)
 
--- Auto Place Eggs Loop
+-- Auto Drop Eggs Loop
 task.spawn(function()
     while not HUB.dead do
         if autoPlaceEggs and not isStealingNow then
             if hasAnyEggToPlace() then
-                pcall(PlaceAllCarriedEggs)
+                pcall(DropAllCarriedEggsAtFirstStage)
             end
         end
         task.wait(1.5)
@@ -1560,10 +1676,10 @@ FarmSub:AddToggle({
 })
 
 FarmSub:AddToggle({
-    Name = "Auto Place Eggs", Default = false, Flag = "auto_place_eggs",
+    Name = "Auto Drop Eggs (First Stage)", Default = false, Flag = "auto_place_eggs",
     Callback = function(v)
         autoPlaceEggs = v
-        Notify("Auto Place Eggs", v and "Enabled (auto-equipping & placing)" or "Disabled", v and "Success" or "Error")
+        Notify("Auto Drop Eggs", v and "Enabled (first-stage Drop Zone)" or "Disabled", v and "Success" or "Error")
     end
 })
 
